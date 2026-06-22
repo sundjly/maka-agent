@@ -137,10 +137,10 @@ select {
 
 button {
   transition:
-    background 150ms ease-out,
-    border-color 150ms ease-out,
-    color 150ms ease-out,
-    transform 150ms ease-out;
+    background 150ms var(--ease-out-strong),
+    border-color 150ms var(--ease-out-strong),
+    color 150ms var(--ease-out-strong),
+    transform 150ms var(--ease-out-strong);
 }
 
 button:active {
@@ -581,7 +581,7 @@ button:active {
   background: transparent;
   color: var(--foreground);
   padding: 7px 10px;
-  transition: background 150ms ease-out;
+  transition: background 150ms var(--ease-out-strong);
 }
 .maka-search-modal-result:hover:not([disabled]) {
   background: oklch(from var(--foreground) l c h / 0.04);
@@ -671,7 +671,7 @@ button:active {
   border-radius: 6px;
   background: transparent;
   color: var(--foreground-55);
-  transition: background 150ms ease-out, color 150ms ease-out, box-shadow 150ms ease-out;
+  transition: background 150ms var(--ease-out-strong), color 150ms var(--ease-out-strong), box-shadow 150ms var(--ease-out-strong);
 }
 
 .maka-sidebar-search-button:hover,
@@ -884,7 +884,7 @@ button:active {
   font-size: 12px;
   font-weight: 500;
   text-align: left;
-  transition: background 150ms ease-out, border-color 150ms ease-out, color 150ms ease-out;
+  transition: background 150ms var(--ease-out-strong), border-color 150ms var(--ease-out-strong), color 150ms var(--ease-out-strong);
 }
 
 .maka-nav-primary:hover {
@@ -967,8 +967,8 @@ button:active {
   font-size: 13px;
   line-height: 1.25;
   transition:
-    background 150ms ease-out,
-    color 150ms ease-out;
+    background 150ms var(--ease-out-strong),
+    color 150ms var(--ease-out-strong);
 }
 
 .maka-nav-row-parent {
@@ -1050,6 +1050,7 @@ button:active {
   background: oklch(from var(--foreground) l c h / 0.06);
   padding: 0 4px;
   font-size: 11px;
+  font-variant-numeric: tabular-nums;
 }
 
 .maka-nav-row[data-active="true"] .maka-nav-count {
@@ -1605,7 +1606,7 @@ button:active {
   display: grid;
   gap: 10px;
   color: var(--foreground);
-  animation: maka-agents-slide-up 200ms ease-out both;
+  animation: maka-agents-slide-up 200ms var(--ease-out-strong) both;
 }
 
 @keyframes maka-agents-slide-up {
@@ -1711,7 +1712,7 @@ button:active {
 }
 
 .maka-onboarding-grid > li {
-  animation: maka-agents-fade-in 150ms ease-out both;
+  animation: maka-agents-fade-in 150ms var(--ease-out-strong) both;
 }
 
 .maka-onboarding-grid > li:nth-child(1) { animation-delay: 60ms; }
@@ -1740,7 +1741,7 @@ button:active {
   background: transparent;
   color: var(--foreground);
   text-align: left;
-  transition: background 150ms ease-out;
+  transition: background 150ms var(--ease-out-strong);
 }
 
 .maka-onboarding-card:hover {
@@ -1951,7 +1952,7 @@ button:active {
   text-decoration: none;
   padding: 5px 8px;
   border-radius: 6px;
-  transition: background 150ms ease-out, color 150ms ease-out, box-shadow 150ms ease-out;
+  transition: background 150ms var(--ease-out-strong), color 150ms var(--ease-out-strong), box-shadow 150ms var(--ease-out-strong);
 }
 
 .maka-onboarding-skip:hover {
@@ -2309,6 +2310,7 @@ button:active {
   white-space: nowrap;
   color: var(--foreground-50);
   font-size: 11px;
+  font-variant-numeric: tabular-nums;
   flex-shrink: 0;
 }
 
@@ -3066,8 +3068,8 @@ button:active {
   padding: 14px 16px 13px;
   min-height: 148px;
   transition:
-    border-color 150ms ease-out,
-    box-shadow 150ms ease-out,
+    border-color 150ms var(--ease-out-strong),
+    box-shadow 150ms var(--ease-out-strong),
     transform 150ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
@@ -3930,7 +3932,7 @@ button:active {
   background: var(--background);
   padding: 16px;
   transition:
-    border-color 150ms ease-out,
+    border-color 150ms var(--ease-out-strong),
     box-shadow 180ms cubic-bezier(0.16, 1, 0.3, 1),
     transform 180ms cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -4051,7 +4053,7 @@ button:active {
   border: 0;
   border-radius: 6px;
   background: transparent;
-  transition: background-color 150ms ease-out;
+  transition: background-color 150ms var(--ease-out-strong);
 }
 
 .maka-skill-template-row:hover {
@@ -4144,7 +4146,7 @@ button:active {
   white-space: normal !important;
   text-align: left;
   transition:
-    background-color 150ms ease-out,
+    background-color 150ms var(--ease-out-strong),
     transform 180ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
@@ -4179,7 +4181,7 @@ button:active {
   background: var(--background);
   box-shadow: 0 1px 2px oklch(from var(--foreground) l c h / 0.05);
   color: var(--foreground-55);
-  transition: background-color 150ms ease-out, color 150ms ease-out;
+  transition: background-color 150ms var(--ease-out-strong), color 150ms var(--ease-out-strong);
 }
 
 /* PR-UI-PIXEL-1: tile stays white on hover (reference keeps icon tiles
@@ -4259,7 +4261,7 @@ button:active {
   text-align: center;
   opacity: 1;
   transform: none;
-  transition: opacity 150ms ease-out, transform 150ms ease-out, background-color 150ms ease-out, color 150ms ease-out;
+  transition: opacity 150ms var(--ease-out-strong), transform 150ms var(--ease-out-strong), background-color 150ms var(--ease-out-strong), color 150ms var(--ease-out-strong);
 }
 
 .maka-skill-library-row:hover .maka-skill-library-action,
@@ -4884,7 +4886,7 @@ button:active {
   opacity: 1;
   transition:
     transform 180ms var(--ease-out-strong),
-    opacity 180ms ease-out,
+    opacity 180ms var(--ease-out-strong),
     background 120ms ease;
 }
 
@@ -5064,7 +5066,7 @@ button:active {
   opacity: 1;
   transform: translateY(0);
   transition:
-    opacity 200ms ease-out,
+    opacity 200ms var(--ease-out-strong),
     transform 220ms var(--ease-out-strong);
 }
 
@@ -5118,7 +5120,7 @@ button:active {
   padding: 2px 7px;
   font-size: 10px;
   font-weight: 600;
-  transition: background-color 150ms ease-out;
+  transition: background-color 150ms var(--ease-out-strong);
 }
 
 .maka-toast-action:hover {
@@ -5134,7 +5136,7 @@ button:active {
   border-radius: 4px;
   background: transparent;
   color: var(--foreground-50);
-  transition: background-color 150ms ease-out, color 150ms ease-out;
+  transition: background-color 150ms var(--ease-out-strong), color 150ms var(--ease-out-strong);
 }
 
 .maka-toast-close:hover {
@@ -5337,7 +5339,7 @@ button:active {
   padding: 4px 8px;
   text-align: left;
   font-size: 11px;
-  transition: background-color 150ms ease-out;
+  transition: background-color 150ms var(--ease-out-strong);
 }
 
 .maka-palette-item[data-active="true"] {
@@ -5576,7 +5578,7 @@ button:active {
    message slides up gently when it lands, including streaming deltas and
    session-switch loads. Honored by prefers-reduced-motion below. */
 .maka-message-row {
-  animation: maka-message-row-enter 220ms ease-out both;
+  animation: maka-message-row-enter 220ms var(--ease-out-strong) both;
 }
 
 @keyframes maka-message-row-enter {
@@ -6408,9 +6410,9 @@ button:active {
 .maka-composer-mode-chip,
 .maka-composer-model-chip {
   transition:
-    background-color 150ms ease-out,
-    color 150ms ease-out,
-    border-color 150ms ease-out;
+    background-color 150ms var(--ease-out-strong),
+    color 150ms var(--ease-out-strong),
+    border-color 150ms var(--ease-out-strong);
 }
 
 .maka-composer-role-chip:hover,
@@ -6485,8 +6487,8 @@ button:active {
   background: transparent;
   color: var(--foreground-60);
   transition:
-    background-color 150ms ease-out,
-    color 150ms ease-out,
+    background-color 150ms var(--ease-out-strong),
+    color 150ms var(--ease-out-strong),
     transform 180ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
@@ -6953,7 +6955,7 @@ button:active {
   /* Modern @starting-style entrance — emil-design-eng prefers transitions
      over keyframes for modals so the animation is interruptible. */
   opacity: 1;
-  transition: opacity 200ms ease-out;
+  transition: opacity 200ms var(--ease-out-strong);
   overscroll-behavior: contain;
 }
 
@@ -6993,7 +6995,7 @@ button:active {
   /* Modals keep transform-origin: center by default. */
   transition:
     transform 240ms var(--ease-out-strong),
-    opacity 200ms ease-out;
+    opacity 200ms var(--ease-out-strong);
 }
 
 @starting-style {
@@ -7018,7 +7020,7 @@ button:active {
   z-index: 35;
   overflow: hidden;
   transform: none;
-  transition: opacity 160ms ease-out;
+  transition: opacity 160ms var(--ease-out-strong);
 }
 
 @starting-style {
@@ -7119,7 +7121,7 @@ button:active {
   padding: 4px 8px;
   text-align: left;
   justify-content: initial;
-  transition: background-color 150ms ease-out, color 150ms ease-out;
+  transition: background-color 150ms var(--ease-out-strong), color 150ms var(--ease-out-strong);
 }
 
 .settingsSidebar .settingsNavItem,
@@ -7591,7 +7593,7 @@ button:active {
   padding: 0 8px;
   font-size: 12px;
   outline: none;
-  transition: border-color 150ms ease-out, box-shadow 150ms ease-out;
+  transition: border-color 150ms var(--ease-out-strong), box-shadow 150ms var(--ease-out-strong);
 }
 
 .settingsField textarea {
@@ -7963,7 +7965,7 @@ button:active {
   border-radius: 4px;
   background: transparent;
   color: var(--foreground-50);
-  transition: background 150ms ease-out, color 150ms ease-out;
+  transition: background 150ms var(--ease-out-strong), color 150ms var(--ease-out-strong);
 }
 .settingsPasswordToggle:hover {
   background: var(--hover);
@@ -9608,10 +9610,10 @@ button:active {
   padding: 10px;
   text-align: left;
   transition:
-    border-color 150ms ease-out,
-    background 150ms ease-out,
-    box-shadow 150ms ease-out,
-    transform 150ms ease-out;
+    border-color 150ms var(--ease-out-strong),
+    background 150ms var(--ease-out-strong),
+    box-shadow 150ms var(--ease-out-strong),
+    transform 150ms var(--ease-out-strong);
 }
 
 /* PR-UI-LAYOUT-15 fixup (@kenji review @msg 0e7482e5):
@@ -9982,7 +9984,7 @@ button:active {
   background: transparent;
   color: var(--foreground);
   text-align: left;
-  transition: background 150ms ease-out, border-color 150ms ease-out, box-shadow 150ms ease-out;
+  transition: background 150ms var(--ease-out-strong), border-color 150ms var(--ease-out-strong), box-shadow 150ms var(--ease-out-strong);
 }
 
 .modelTableRow:hover {
@@ -11439,7 +11441,7 @@ button:active {
   background: var(--foreground-5);
   color: var(--foreground-70);
   font-size: 10px;
-  transition: background 150ms ease-out, color 150ms ease-out;
+  transition: background 150ms var(--ease-out-strong), color 150ms var(--ease-out-strong);
 }
 .maka-turn-lineage-badge:hover {
   background: var(--foreground-10, oklch(from var(--foreground) l c h / 0.08));
@@ -11480,7 +11482,7 @@ button:active {
   color: var(--info-text);
   font-size: 11px;
   line-height: 1.4;
-  transition: background 150ms ease-out, color 150ms ease-out, border-color 150ms ease-out;
+  transition: background 150ms var(--ease-out-strong), color 150ms var(--ease-out-strong), border-color 150ms var(--ease-out-strong);
   align-self: flex-start;
 }
 .maka-session-branch-banner:hover {
@@ -11550,7 +11552,7 @@ button:active {
   letter-spacing: 0.02em;
   color: var(--info-text);
   user-select: none;
-  transition: background 150ms ease-out;
+  transition: background 150ms var(--ease-out-strong);
 }
 .maka-reasoning-panel-header::-webkit-details-marker {
   display: none;
@@ -11629,7 +11631,7 @@ button:active {
   font-size: 12px;
   line-height: 1;
   color: var(--foreground-50);
-  transition: transform 150ms ease-out;
+  transition: transform 150ms var(--ease-out-strong);
 }
 
 .maka-reasoning-panel[open] .maka-reasoning-panel-chevron {

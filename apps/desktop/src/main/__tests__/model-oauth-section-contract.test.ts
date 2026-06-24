@@ -253,7 +253,7 @@ describe('Model OAuth catalog contract (PR-MODEL-OAUTH-ALL-0 + PR-CLAUDE-CARD-MO
     );
     assert.match(
       addForm,
-      /<Button className="maka-button" variant="ghost" type="button" disabled=\{busy\} onClick=\{props\.onCancel\}>取消<\/Button>/,
+      /<Button variant="ghost" type="button" disabled=\{busy\} onClick=\{props\.onCancel\}>取消<\/Button>/,
       'AddProviderForm cancel must be disabled while create is in flight',
     );
     assert.doesNotMatch(
@@ -610,7 +610,7 @@ describe('Model OAuth catalog contract (PR-MODEL-OAUTH-ALL-0 + PR-CLAUDE-CARD-MO
     );
     assert.match(
       detail,
-      /!\s*props\.isDefault && connection\.enabled && \([\s\S]*<Button className="maka-button" variant="secondary" type="button" disabled=\{detailActionBusy\} onClick=\{setAsDefault\}>[\s\S]*\{settingDefault \? '设置中…' : '设为默认'\}[\s\S]*<\/Button>/,
+      /!\s*props\.isDefault && connection\.enabled && \([\s\S]*<Button variant="secondary" type="button" disabled=\{detailActionBusy\} onClick=\{setAsDefault\}>[\s\S]*\{settingDefault \? '设置中…' : '设为默认'\}[\s\S]*<\/Button>/,
       'disabled connections must not render the set-default action',
     );
   });
@@ -668,7 +668,7 @@ describe('Model OAuth catalog contract (PR-MODEL-OAUTH-ALL-0 + PR-CLAUDE-CARD-MO
     );
     assert.match(
       detail,
-      /<Button className="maka-button" variant="destructive" type="button" disabled=\{detailActionBusy\} onClick=\{remove\}>[\s\S]*\{deleting \? '删除中…' : '删除'\}[\s\S]*<\/Button>/,
+      /<Button variant="destructive" type="button" disabled=\{detailActionBusy\} onClick=\{remove\}>[\s\S]*\{deleting \? '删除中…' : '删除'\}[\s\S]*<\/Button>/,
       'Delete should be disabled while provider detail actions are busy and show its own pending copy',
     );
   });

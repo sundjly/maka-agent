@@ -352,7 +352,7 @@ export function ProvidersPanel({ bridge }: { bridge: ConnectionsBridge }) {
             <h3>模型供应商</h3>
             <p>选择 API Key 服务、本地模型、OAuth 账号登录，或自定义 OpenAI 兼容接口。</p>
           </div>
-          <Button className="maka-button" type="button" onClick={() => startAdd('openai-compatible')}>
+          <Button type="button" onClick={() => startAdd('openai-compatible')}>
             自定义
           </Button>
         </div>
@@ -868,7 +868,6 @@ function ClaudeSubscriptionModal(props: { onClose(): void }) {
           </div>
           <Button
             type="button"
-            className="maka-button"
             variant="ghost"
             onClick={props.onClose}
             aria-label="关闭"
@@ -1049,7 +1048,6 @@ function SubscriptionLoginModal(props: { serviceId: BrowserOAuthServiceId; onClo
           </div>
           <Button
             type="button"
-            className="maka-button"
             variant="ghost"
             onClick={props.onClose}
             aria-label="关闭"
@@ -1071,7 +1069,6 @@ function SubscriptionLoginModal(props: { serviceId: BrowserOAuthServiceId; onClo
             {!isLoggedIn ? (
               <Button
                 type="button"
-                className="maka-button"
                 onClick={() => void startLogin()}
                 disabled={actionBusy}
               >
@@ -1080,7 +1077,6 @@ function SubscriptionLoginModal(props: { serviceId: BrowserOAuthServiceId; onClo
             ) : (
               <Button
                 type="button"
-                className="maka-button"
                 variant="ghost"
                 onClick={() => void logout()}
                 disabled={actionBusy}
@@ -1336,8 +1332,8 @@ function AddProviderForm(props: {
       </label>
       {error && <p className="providerError">{error}</p>}
       <div className="providerActions">
-        <Button className="maka-button" variant="ghost" type="button" disabled={busy} onClick={props.onCancel}>取消</Button>
-        <Button className="maka-button" type="button" disabled={busy || isExperimental} onClick={submit}>
+        <Button variant="ghost" type="button" disabled={busy} onClick={props.onCancel}>取消</Button>
+        <Button type="button" disabled={busy || isExperimental} onClick={submit}>
           {busy ? '保存中…' : '保存供应商'}
         </Button>
       </div>
@@ -1744,18 +1740,18 @@ function ConnectionDetail(props: {
         </a>
       )}
       <div className="providerActions">
-        <Button className="maka-button" type="button" disabled={detailActionBusy || !hasSaveChanges} onClick={save}>
+        <Button type="button" disabled={detailActionBusy || !hasSaveChanges} onClick={save}>
           {busy ? '保存中…' : '保存修改'}
         </Button>
-        <Button className="maka-button" variant="secondary" type="button" disabled={detailActionBusy || !hasUsableCredential} onClick={runTest}>
+        <Button variant="secondary" type="button" disabled={detailActionBusy || !hasUsableCredential} onClick={runTest}>
           {testing ? '测试中…' : '测试连接'}
         </Button>
         {!props.isDefault && connection.enabled && (
-          <Button className="maka-button" variant="secondary" type="button" disabled={detailActionBusy} onClick={setAsDefault}>
+          <Button variant="secondary" type="button" disabled={detailActionBusy} onClick={setAsDefault}>
             {settingDefault ? '设置中…' : '设为默认'}
           </Button>
         )}
-        <Button className="maka-button" variant="destructive" type="button" disabled={detailActionBusy} onClick={remove}>
+        <Button variant="destructive" type="button" disabled={detailActionBusy} onClick={remove}>
           {deleting ? '删除中…' : '删除'}
         </Button>
       </div>
@@ -1904,7 +1900,6 @@ function ModelTable(props: {
           </small>
         </div>
         <Button
-          className="maka-button"
           type="button"
           disabled={!props.canRefresh}
           onClick={props.onRefresh}
@@ -2155,7 +2150,6 @@ function ClaudeSubscriptionCard() {
         <div className="settingsConnectionActions">
           <Button
             type="button"
-            className="maka-button"
             onClick={() => void refreshExperimentalGate()}
           >
             重试
@@ -2357,7 +2351,6 @@ function ClaudeSubscriptionCard() {
         {canStartClaudeLogin || claudeLoginPending ? (
           <Button
             type="button"
-            className="maka-button"
             onClick={() => void startLogin()}
             disabled={actionBusy || claudeLoginPending}
           >
@@ -2373,7 +2366,6 @@ function ClaudeSubscriptionCard() {
           <>
             <Button
               type="button"
-              className="maka-button"
               onClick={() => void refreshQuota()}
               disabled={actionBusy}
             >
@@ -2381,7 +2373,6 @@ function ClaudeSubscriptionCard() {
             </Button>
             <Button
               type="button"
-              className="maka-button"
               variant="ghost"
               onClick={() => void logout()}
               disabled={actionBusy}
@@ -2414,7 +2405,6 @@ function ClaudeSubscriptionCard() {
           <div className="settingsConnectionActions">
             <Button
               type="button"
-              className="maka-button"
               onClick={() => void submitPaste()}
               disabled={actionBusy || pasteValue.trim().length === 0}
             >
@@ -2422,7 +2412,6 @@ function ClaudeSubscriptionCard() {
             </Button>
             <Button
               type="button"
-              className="maka-button"
               variant="ghost"
               onClick={() => void cancelLogin()}
               disabled={actionBusy}

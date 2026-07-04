@@ -38,12 +38,12 @@ import { describe, it } from 'node:test';
 import { join, resolve } from 'node:path';
 import { readRendererContractCss } from './contract-css-helpers.js';
 import { readRendererShellCombinedSource } from './renderer-shell-source-helpers.js';
+import { renderSessionListPanel } from './session-list-render-helpers.js';
 
 const REPO_ROOT = resolve(import.meta.dirname, '../../../../..');
 const COMPONENTS_PATH = resolve(REPO_ROOT, 'packages', 'ui', 'src', 'chat-view.tsx');
 const SEARCH_MODAL_PATH = resolve(REPO_ROOT, 'packages', 'ui', 'src', 'search-modal.tsx');
 const MODAL_A11Y_PATH = resolve(REPO_ROOT, 'packages', 'ui', 'src', 'modal-a11y.ts');
-const SESSION_LIST_PANEL_PATH = resolve(REPO_ROOT, 'packages', 'ui', 'src', 'session-list-panel.tsx');
 const COMMAND_PALETTE_CONTENT_PATH = join(REPO_ROOT, 'apps', 'desktop', 'src', 'renderer', 'command-palette-content-search.ts');
 
 describe('SearchModal lifecycle contract (PR-SIDEBAR-IA-0 Phase 3 P0 fixup)', () => {
@@ -437,11 +437,10 @@ describe('SearchModal lifecycle contract (PR-SIDEBAR-IA-0 Phase 3 P0 fixup)', ()
   });
 
   it('session time buckets use product labels without unfinished-state wording', async () => {
-    const sessionListPanel = await readFile(SESSION_LIST_PANEL_PATH, 'utf8');
-    const groupingBlock = sessionListPanel.slice(sessionListPanel.indexOf('function groupSessionsByTime'), sessionListPanel.indexOf('function formatSessionMeta'));
+    const markup = renderSessionListPanel({ session: { lastMessageAt: undefined } });
 
-    assert.match(groupingBlock, /label:\s*'待发送'/, 'Sessions with no messages should live in the concise pending-send bucket');
-    assert.doesNotMatch(groupingBlock, /尚未发送/, 'Session group labels should not read like unfinished implementation copy');
+    assert.match(markup, /待发送/, 'Sessions with no messages should live in the concise pending-send bucket');
+    assert.doesNotMatch(markup, /尚未发送/, 'Session group labels should not read like unfinished implementation copy');
   });
 });
 

@@ -15,6 +15,8 @@ import {
   webSearchCredentialSourceFromStoredKey,
 } from './web-search.js';
 import { defaultLocalMemorySettings, normalizeLocalMemorySettings } from './local-memory.js';
+import type { PermissionMode } from './permission.js';
+import { PERMISSION_MODES } from './permission.js';
 
 /**
  * PR-SETTINGS-IA-CONSOLIDATE-0 + PR-SETTINGS-REVIEW-0 (WAWQAQ msg
@@ -263,6 +265,29 @@ export interface PrivacySettings {
   incognitoActive: boolean;
 }
 
+/**
+ * `explore` is excluded — it's reserved for Deep Research sessions and
+ * Bot-incoming guards and is never a mode the user picks, in the composer
+ * dropdown or here. Derived from the canonical PERMISSION_MODES (not a
+ * hand-copied literal) so adding a future mode updates every consumer —
+ * the Settings picker, the composer picker (@maka/ui re-exports this
+ * list as PERMISSION_MODE_ORDER), and the settings validation — in one
+ * place.
+ */
+export type ChatDefaultPermissionMode = Exclude<PermissionMode, 'explore'>;
+
+export const CHAT_DEFAULT_PERMISSION_MODES: readonly ChatDefaultPermissionMode[] =
+  PERMISSION_MODES.filter((mode): mode is ChatDefaultPermissionMode => mode !== 'explore');
+
+export function isChatDefaultPermissionMode(value: unknown): value is ChatDefaultPermissionMode {
+  return typeof value === 'string' && (CHAT_DEFAULT_PERMISSION_MODES as readonly string[]).includes(value);
+}
+
+/** Seeds new sessions' starting permission mode (Settings → 通用 → 默认权限模式). */
+export interface ChatDefaultsSettings {
+  permissionMode: ChatDefaultPermissionMode;
+}
+
 export interface AppSettings {
   schemaVersion: 1;
   network: NetworkSettings;
@@ -276,6 +301,7 @@ export interface AppSettings {
   localMemory: LocalMemorySettings;
   workspaceInstructions: WorkspaceInstructionsSettings;
   privacy: PrivacySettings;
+  chatDefaults: ChatDefaultsSettings;
 }
 
 export interface UsageRequestLog {
@@ -341,6 +367,7 @@ export type UpdateAppSettingsInput = Partial<{
   localMemory: Partial<LocalMemorySettings>;
   workspaceInstructions: Partial<WorkspaceInstructionsSettings>;
   privacy: Partial<PrivacySettings>;
+  chatDefaults: Partial<ChatDefaultsSettings>;
   webSearch: Partial<{
     enabled: boolean;
     defaultProvider: WebSearchProvider;
@@ -461,6 +488,7 @@ export function createDefaultSettings(): AppSettings {
       enabled: true,
     },
     privacy: defaultPrivacySettings(),
+    chatDefaults: defaultChatDefaultsSettings(),
   };
 }
 
@@ -531,6 +559,9 @@ export function mergeSettings(current: AppSettings, patch: UpdateAppSettingsInpu
     privacy: patch.privacy
       ? normalizePrivacySettings({ ...current.privacy, ...patch.privacy })
       : current.privacy,
+    chatDefaults: patch.chatDefaults
+      ? normalizeChatDefaultsSettings({ ...current.chatDefaults, ...patch.chatDefaults })
+      : current.chatDefaults,
     webSearch: mergeWebSearchSettings(current.webSearch, patch.webSearch),
   };
 }
@@ -613,6 +644,7 @@ export function normalizeSettings(input: unknown): AppSettings {
     localMemory: value.localMemory,
     workspaceInstructions: value.workspaceInstructions,
     privacy: value.privacy,
+    chatDefaults: value.chatDefaults,
   });
   // PR110b: milestones bypass the generic patch surface so we can
   // sanitize them with the closed-enum + at-most-one validator on
@@ -680,6 +712,7 @@ export function normalizeSettings(input: unknown): AppSettings {
     localMemory: normalizeLocalMemorySettings(base.localMemory),
     workspaceInstructions: normalizeWorkspaceInstructionsSettings(base.workspaceInstructions),
     privacy: normalizePrivacySettings(base.privacy),
+    chatDefaults: normalizeChatDefaultsSettings(base.chatDefaults),
   };
 }
 
@@ -691,6 +724,21 @@ function normalizeWorkspaceInstructionsSettings(settings: WorkspaceInstructionsS
 
 function defaultPrivacySettings(): PrivacySettings {
   return { incognitoActive: false };
+}
+
+function defaultChatDefaultsSettings(): ChatDefaultsSettings {
+  return { permissionMode: 'ask' };
+}
+
+// Closed-enum fail-closed, same reasoning as appearance.palette /
+// personalization.uiLocale above: an unknown/garbage persisted value
+// (corrupted settings.json, a downgraded build reading a newer schema)
+// must not reach session-creation code as a `PermissionMode` the picker
+// doesn't recognize -- fall back to the safest default instead.
+function normalizeChatDefaultsSettings(settings: ChatDefaultsSettings): ChatDefaultsSettings {
+  return {
+    permissionMode: isChatDefaultPermissionMode(settings.permissionMode) ? settings.permissionMode : 'ask',
+  };
 }
 
 function normalizePrivacySettings(settings: PrivacySettings): PrivacySettings {

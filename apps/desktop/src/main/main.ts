@@ -22,6 +22,7 @@ import type {
   BotReadinessState,
   ConnectionEvent,
   CreateSessionInput,
+  PermissionMode,
   SessionChangedEvent,
   SessionChangedReason,
   SessionEvent,
@@ -1022,7 +1023,7 @@ function registerIpc(): void {
         backend: 'fake',
         llmConnectionSlug: input.llmConnectionSlug ?? 'fake',
         model: input.model ?? 'fake-model',
-        permissionMode: input.permissionMode ?? 'ask',
+        permissionMode: input.permissionMode ?? (await resolveDefaultPermissionMode()),
         name: input.name ?? 'New Chat',
         labels: input.labels,
       });
@@ -1038,7 +1039,7 @@ function registerIpc(): void {
       backend: 'ai-sdk',
       llmConnectionSlug: connection.slug,
       model,
-      permissionMode: input?.permissionMode ?? 'ask',
+      permissionMode: input?.permissionMode ?? (await resolveDefaultPermissionMode()),
       name: input?.name ?? 'New Chat',
       labels: input?.labels,
     });
@@ -1540,6 +1541,23 @@ function getReadyConnection(slug: string | null | undefined, model?: string) {
 }
 
 /**
+ * Settings → 通用 → 默认权限模式, hardened: session creation must never
+ * fail because settings.json is unreadable/corrupted (settingsStore.get()
+ * rethrows anything but ENOENT). Before this fallback existed the mode was
+ * a synchronous `'ask'` literal with zero settings dependency — keep that
+ * never-fails guarantee by falling back to the safest mode on any error.
+ * This is the SINGLE authority for a new session's default: the renderer
+ * intentionally omits permissionMode unless the user explicitly picked one.
+ */
+async function resolveDefaultPermissionMode(): Promise<PermissionMode> {
+  try {
+    return (await settingsStore.get()).chatDefaults.permissionMode;
+  } catch {
+    return 'ask';
+  }
+}
+
+/**
  * PR110b: Quick Chat entry — thin adapter over the extracted helper.
  * The discriminated-union logic + readiness gating lives in
  * `./quick-chat.ts` so it can be unit-tested without spinning up an
@@ -1552,13 +1570,23 @@ async function handleQuickChatStart(rawInput: unknown): Promise<QuickChatResult>
       // Re-run requireReadyConnection inside the create path to close
       // the race window between `getSnapshot()` and `createSession()`
       // (e.g. user revoked credential in another window).
-      const ready = await getReadyConnection(input.defaultConnectionSlug, input.defaultModel);
+      // Deep Research always forces 'explore' (read-only exploration
+      // boundary) regardless of the user's default; any other Quick Chat
+      // session seeds from the same default as the regular sessions:create
+      // path. The settings read is independent of the connection check, and
+      // this sits on the first-message latency path — run them in parallel.
+      const [ready, permissionMode] = await Promise.all([
+        getReadyConnection(input.defaultConnectionSlug, input.defaultModel),
+        input.mode === 'deep_research'
+          ? Promise.resolve<PermissionMode>('explore')
+          : resolveDefaultPermissionMode(),
+      ]);
       return runtime.createSession({
         cwd: process.cwd(),
         backend: 'ai-sdk',
         llmConnectionSlug: ready.connection.slug,
         model: ready.model,
-        permissionMode: input.mode === 'deep_research' ? 'explore' : 'ask',
+        permissionMode,
         name: input.mode === 'deep_research' ? 'Deep Research' : 'New Chat',
         labels: input.mode === 'deep_research' ? [DEEP_RESEARCH_SESSION_LABEL] : [],
       });

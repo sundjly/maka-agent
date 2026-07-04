@@ -172,7 +172,13 @@ export function createAppShellChatActions(deps: {
       const turnId = crypto.randomUUID();
       if (!initialSessionId) {
         const session = await window.maka.sessions.create({
-          permissionMode: pendingNewChatPermissionMode ?? 'ask',
+          // Only send permissionMode when the user explicitly picked one in
+          // the composer. Omitting it lets main.ts's sessions:create resolve
+          // the configured chatDefaults.permissionMode as the single
+          // authority — a renderer-side copy of the default can be stale
+          // (e.g. before the mount-time settings load resolves on a cold
+          // start), which would silently override the configured setting.
+          ...(pendingNewChatPermissionMode ? { permissionMode: pendingNewChatPermissionMode } : {}),
           name: text.slice(0, 42) || '新建对话',
           ...(validPendingNewChatModel
             ? { llmConnectionSlug: validPendingNewChatModel.llmConnectionSlug, model: validPendingNewChatModel.model }

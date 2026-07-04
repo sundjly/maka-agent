@@ -46,13 +46,22 @@ export function SettingsModal(props: {
   onOpenSession?(sessionId: string): void;
 }) {
   const pageRef = useRef<HTMLDivElement>(null);
+  // Focused by SettingsSurface's section-keyed effect (mount + section
+  // change). Deliberately NOT focused from an effect here keyed on any
+  // callback prop: `onClose` is recreated on every AppShell render (which
+  // happens per streamed token), and a focus side effect keyed on it yanks
+  // focus away from anything open inside Settings while a session streams.
   const activeNavRef = useRef<HTMLButtonElement>(null);
+
+  // The Escape listener is safe to resubscribe on every onClose identity
+  // change (it only adds/removes a DOM listener, not a focus-stealing side
+  // effect), and keeping it keyed on `onClose` guarantees Escape always
+  // calls the current closure rather than a stale one.
   useEffect(() => {
     function onKey(event: globalThis.KeyboardEvent) {
       if (event.key === 'Escape') props.onClose();
     }
     window.addEventListener('keydown', onKey);
-    activeNavRef.current?.focus();
     return () => window.removeEventListener('keydown', onKey);
   }, [props.onClose]);
 

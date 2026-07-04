@@ -220,6 +220,7 @@ export function AppShell() {
   const activeStreaming = activeStreamingSlot?.text ?? '';
   const activeStreamingTruncated = activeStreamingSlot?.truncated === true;
   const activeStreamingComplete = activeStreamingSlot?.phase === 'draining';
+  const activeStreamingLive = activeStreaming.length > 0 && activeStreamingSlot?.phase === 'streaming';
   const activeStreamingMessageId = activeStreamingComplete ? activeStreamingSlot?.messageId : undefined;
   const activeThinking = activeId ? thinkingBySession[activeId] ?? '' : '';
   const activeThinkingTruncated = activeId ? thinkingTruncatedBySession[activeId] === true : false;
@@ -227,7 +228,7 @@ export function AppShell() {
   // pulse indicator. Recomputed on every streamingBySession change; cheap
   // since the underlying map only has at most a handful of entries.
   const streamingSessionIds = useMemo(
-    () => new Set(Object.entries(streamingBySession).flatMap(([id, slot]) => (slot.text ? [id] : []))),
+    () => new Set(Object.entries(streamingBySession).flatMap(([id, slot]) => (slot.text && slot.phase === 'streaming' ? [id] : []))),
     [streamingBySession],
   );
   // Set of session ids whose backend / connection is no longer usable —
@@ -841,6 +842,13 @@ export function AppShell() {
     toastApi,
   });
 
+  useEffect(() => {
+    if (!activeId || !activeStreamingComplete || !activeStreamingMessageId) return;
+    const committedAssistantArrived = messages.some((message) => message.type === 'assistant' && message.id === activeStreamingMessageId);
+    if (!committedAssistantArrived) return;
+    void settleAssistantStreaming(activeId, activeStreamingMessageId);
+  }, [activeId, activeStreamingComplete, activeStreamingMessageId, messages, settleAssistantStreaming]);
+
   const hasModalOpen = Boolean(activePermission) || helpOpen || paletteOpen || searchModalOpen;
 
   useAppShellRefSync({
@@ -907,7 +915,7 @@ export function AppShell() {
     activeId,
     activePermission,
     activeSession,
-    activeStreaming,
+    activeStreamingLive,
     hasInFlightLiveTools,
     refreshMessages,
     refreshSessions,
@@ -1367,7 +1375,7 @@ export function AppShell() {
                 hidden={navSelection.section !== 'sessions' || onboardingComposerHidden}
                 draftKey={activeId ?? 'new-session'}
                 disabled={Boolean(activePermission)}
-                streaming={activeStreaming.length > 0}
+                streaming={activeStreamingLive}
                 onSend={send}
                 onStop={stop}
                 stopPending={activeId ? stopPendingBySession[activeId] === true : false}
@@ -1403,7 +1411,7 @@ export function AppShell() {
                 permissionModeDisabledReason={
                   activeId && pendingPermissionModeBySession[activeId] === true
                     ? '权限模式正在切换，完成后再继续操作。'
-                    : activeStreaming.length > 0
+                    : activeStreamingLive
                       ? '当前对话正在流式输出，等结束后再切换权限模式。'
                       : activeId && activeSessionForView?.status === 'running'
                         ? '当前对话正在运行，等结束后再切换权限模式。'

@@ -22,8 +22,9 @@ import {
   type MakaUriDest,
   MakaUriContext,
   type NavSelection,
-  SessionListPanel,
-  type SkillEntry,
+	  SessionListPanel,
+	  type SessionViewMode,
+	  type SkillEntry,
   type TurnFooterActionMeta,
   useToast,
   activePermissionFor,
@@ -52,6 +53,7 @@ function BrowserPanelFallback() {
 }
 import { deriveChatHeaderAlert } from './chat-header-alert';
 import { deriveStaleSessionIds } from './stale-sessions';
+import { deriveProjectGroups } from './session-project-grouping';
 import { deriveSessionStatusGroups } from './session-status-grouping';
 import {
   normalizeSessionSummaryForDisplay,
@@ -217,6 +219,7 @@ export function AppShell({
     turnId: string;
     nonce: number;
   } | null>(null);
+  const [viewMode, setViewMode] = useState<SessionViewMode>('status');
   function closeSearchModal(options?: { restoreFocus?: boolean }) {
     setSearchModalOpen(false);
     if (options?.restoreFocus === false) return;
@@ -263,10 +266,13 @@ export function AppShell({
   // Running → Waiting → Blocked → Active → Review → Done → Archived);
   // `aborted` is dropped. Pinned (flagged) sessions float to the top
   // in their own group, preserving the PR48 pin-floats behavior.
+  const visibleSessions = useMemo(() => filterSessions(sessions, navSelection), [sessions, navSelection]);
   const sessionStatusGroups = useMemo(
-    () => deriveSessionStatusGroups(sessions, { pinFirst: true }),
-    [sessions],
+    () => deriveSessionStatusGroups(visibleSessions, { pinFirst: true }),
+    [visibleSessions],
   );
+  const sessionProjectGroups = useMemo(() => deriveProjectGroups(visibleSessions), [visibleSessions]);
+  const sessionListGroups = viewMode === 'project' ? sessionProjectGroups : sessionStatusGroups;
   const liveTools = useMemo(() => (activeId ? liveToolsBySession[activeId] ?? [] : []), [activeId, liveToolsBySession]);
   const hasInFlightLiveTools = useMemo(() => hasInFlightToolActivity(liveTools), [liveTools]);
   const activeSessionEventHealth = activeId ? sessionEventHealthBySession[activeId] : undefined;
@@ -658,7 +664,6 @@ export function AppShell({
     permissionMode: defaultPermissionMode,
   } : undefined);
   const activeMessageLoading = Boolean(activeId && messageLoadPending);
-  const visibleSessions = useMemo(() => filterSessions(sessions, navSelection), [sessions, navSelection]);
   // PR110c: OnboardingState is now the single source of truth for
   // first-run UI. The renderer never re-derives provider readiness;
   // `useOnboardingSnapshot()` pulls the derived state from the main
@@ -1265,7 +1270,9 @@ export function AppShell({
             planReminders={planReminders}
             streamingSessionIds={streamingSessionIds}
             staleSessionIds={staleSessionIds}
-            statusGroups={sessionStatusGroups}
+            viewMode={viewMode}
+            onViewModeChange={setViewMode}
+            statusGroups={sessionListGroups}
             onSelect={setNavSelection}
             onSelectSession={sessionListSelectSession}
             onOpenSettings={openSettings}

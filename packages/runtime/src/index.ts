@@ -496,6 +496,14 @@ export type {
   PromptSegmentInput,
 } from './context-budget.js';
 export {
+  loadSynthesisCacheBlocksFromArtifacts,
+  persistSynthesisCacheBlocksToArtifacts,
+} from './synthesis-cache-artifacts.js';
+export type {
+  PersistSynthesisCacheBlocksDeps,
+  SynthesisCacheArtifactStore,
+} from './synthesis-cache-artifacts.js';
+export {
   activeFullCompactBlockToCompactionBoundary,
   activeFullCompactCoverageFromEntries,
   activeFullCompactDecisionDiagnosticPatch,

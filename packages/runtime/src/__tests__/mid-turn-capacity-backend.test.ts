@@ -9,6 +9,7 @@ import type { RuntimeEvent } from '@maka/core/runtime-event';
 import type { AgentBackend, BackendSendInput } from '@maka/core/backend-types';
 import { z } from 'zod';
 import { AiSdkBackend } from '../ai-sdk-backend.js';
+import { buildDefaultContextBudgetPolicy } from '../context-budget-policy.js';
 import { AiSdkFlow, createSessionEventMapMemory, mapSessionEventToRuntimeEvent } from '../ai-sdk-flow.js';
 import type { InvocationContext } from '../invocation-context.js';
 import { PermissionEngine } from '../permission-engine.js';
@@ -52,6 +53,13 @@ interface MidTurnFixture {
 
 interface MidTurnFixtureOptions {
   contextWindow?: number;
+  /** Omit the model's context window entirely (unknown model metadata). */
+  withoutContextWindow?: boolean;
+  /**
+   * Derive the policy from the runtime default (buildDefaultContextBudgetPolicy)
+   * instead of the hand-built one, so a test can exercise the shipped default.
+   */
+  useRuntimeDefaultPolicy?: boolean;
   reserveTokens?: number;
   summarize?: () => Promise<string | undefined> | string | undefined;
   branch?: string;
@@ -215,7 +223,10 @@ function buildFixture(options: MidTurnFixtureOptions = {}): MidTurnFixture {
     sessionId: 'session-1',
     header: header(),
     appendMessage: async (message) => { messages.push(message); },
-    connection: { ...connection(), models: [{ id: 'mock-model-id', contextWindow }] },
+    connection: {
+      ...connection(),
+      models: [{ id: 'mock-model-id', ...(options.withoutContextWindow ? {} : { contextWindow }) }],
+    },
     apiKey: 'sk-test',
     modelId: 'mock-model-id',
     permissionEngine: new PermissionEngine({ newId: () => 'permission-id', now: () => 1 }),
@@ -254,7 +265,22 @@ function buildFixture(options: MidTurnFixtureOptions = {}): MidTurnFixture {
     ...(options.bigSystemPrompt
       ? { systemPrompt: 'SYSTEM_CONTEXT '.repeat(400) }
       : {}),
-    contextBudget: {
+    contextBudget: options.useRuntimeDefaultPolicy
+      ? buildDefaultContextBudgetPolicy(
+          { ...connection(), models: [{ id: 'mock-model-id', contextWindow }] },
+          {
+            name: 'runtime-default-mid-turn',
+            modelId: 'mock-model-id',
+            // Every value is the shipped runtime default (including the
+            // default-on midTurn derivation and the window-bounded reserve
+            // under test); a test may still size the reserve to its toy window
+            // through the first-class env knob by passing reserveTokens.
+            env: options.reserveTokens !== undefined
+              ? { MAKA_CONTEXT_HISTORY_COMPACT_RESERVE_TOKENS: String(options.reserveTokens) }
+              : {},
+          },
+        )
+      : {
       name: 'mid-turn-test',
       maxHistoryEstimatedTokens: 100_000,
       minRecentTurns: 1,
@@ -1042,6 +1068,123 @@ describe('mid-turn capacity compaction flow plumbing', () => {
     }
     assert.equal(sendInputs.length, 1);
     assert.equal(sendInputs[0]?.headAnchorRuntimeEvent, anchor);
+  });
+});
+
+describe('mid-turn capacity default-on safety guards (issue #882 PR 3)', () => {
+  test('does not fire when the selected model has no known context window (conservative default)', async () => {
+    // PR 3 sinks midTurn on by default, but the backend only activates it when
+    // resolveSelectedModelContextWindow yields a window. An unknown model (no
+    // metadata, no models[].contextWindow) must fall back to never compacting
+    // rather than guessing a window — the turn runs raw and completes normally.
+    const fixture = buildFixture({ withoutContextWindow: true });
+    await runFixtureTurn(fixture);
+
+    assert.equal(fixture.recorded.length, 0);
+    assert.equal(fixture.summarizerCalls, 0);
+    assert.equal(fixture.ledgerReads, 0);
+    const complete = fixture.events.find((event) => event.type === 'complete');
+    assert.equal(complete?.type === 'complete' ? complete.stopReason : undefined, 'end_turn');
+    // The raw span is never folded away, proving no compaction ran.
+    assert.equal(promptJson(fixture, 2).includes('RAW_SPAN_ONE_'), true);
+  });
+
+  test('does not fire for a session without a persisted head anchor (child sessions have no seam)', async () => {
+    // PR 1's decision: child sessions are structurally without the head-anchor
+    // seam, so even with midTurn on by default the trigger must never activate.
+    // Sending without a headAnchorRuntimeEvent reproduces that shape.
+    const fixture = buildFixture();
+    const events: SessionEvent[] = [];
+    for await (const event of fixture.backend.send({
+      runId: 'run-1',
+      turnId: 'turn-1',
+      text: ANCHOR_TEXT,
+      context: [],
+      runtimeContext: [...fixture.priorEvents],
+    })) {
+      fixture.persist(event);
+      events.push(event);
+    }
+
+    assert.equal(fixture.recorded.length, 0);
+    assert.equal(fixture.summarizerCalls, 0);
+    const complete = events.find((event) => event.type === 'complete');
+    assert.equal(complete?.type === 'complete' ? complete.stopReason : undefined, 'end_turn');
+  });
+
+  test('never runs a pointless summarizer on a small-window model under the shipped defaults (review P2)', async () => {
+    // gpt-4 shape: an 8192-token window under the runtime-derived defaults.
+    // A flat 16384 reserve used to clamp the mid_turn high water to 1 token —
+    // every boundary triggered, the summarizer ran, and the checkpoint could
+    // never pass the 1-token replay gate: pure waste. With the window-bounded
+    // reserve the payload sits far below the high water, so the default must
+    // be completely inert here: no summarizer call, no checkpoint, and the
+    // turn completes on the raw projection.
+    const fixture = buildFixture({ useRuntimeDefaultPolicy: true, contextWindow: 8_192 });
+    await runFixtureTurn(fixture);
+
+    assert.equal(fixture.summarizerCalls, 0);
+    assert.equal(fixture.recorded.length, 0);
+    assert.equal(fixture.model.doStreamCalls.length, 3);
+    const complete = fixture.events.find((event) => event.type === 'complete');
+    assert.equal(complete?.type === 'complete' ? complete.stopReason : undefined, 'end_turn');
+    assert.equal(promptJson(fixture, 2).includes('RAW_SPAN_ONE_'), true);
+  });
+});
+
+describe('the shipped runtime default drives the proactive long-turn journey (issue #882 PR 3)', () => {
+  test('a long turn near the window compacts mid-turn, persists the checkpoint, and continues instead of truncating', async () => {
+    // No hand-built policy and no env override: this wires
+    // buildDefaultContextBudgetPolicy — the exact default every surface now
+    // inherits — into the backend. A long turn whose real usage crosses
+    // `contextWindow - derivedReserve` (window 1000 → reserve 250, high water
+    // 750) must fold a safe completed prefix into a DURABLE mid_turn
+    // checkpoint and continue the SAME turn to normal completion, never
+    // truncate it or surface a raw provider error.
+    const fixture = buildFixture({
+      useRuntimeDefaultPolicy: true,
+      contextWindow: 1_000,
+      bigPriors: true,
+      firstStepUsage: { input: 900, output: 20 },
+    });
+    await runFixtureTurn(fixture);
+
+    // The checkpoint was durably persisted (not a fail-open raw continuation).
+    assert.equal(fixture.recorded.length, 1);
+    assert.equal(fixture.recorded[0]?.phase, 'mid_turn');
+    // The continued request rides the compacted projection: the compact block
+    // is present and the replaced raw span is gone.
+    const continuedPrompt = promptJson(fixture, 1);
+    assert.match(continuedPrompt, /maka_history_compact_checkpoint/);
+    assert.match(continuedPrompt, /MID_TURN_SUMMARY_SENTINEL/);
+    assert.equal(continuedPrompt.includes('PRIOR_FACT'), false);
+    assert.equal(continuedPrompt.includes(ANCHOR_TEXT), true);
+    // ...and the turn continued through all three steps to a clean end — no
+    // truncation, no raw provider error surfaced to the user.
+    assert.equal(fixture.model.doStreamCalls.length, 3);
+    const complete = fixture.events.find((event) => event.type === 'complete');
+    assert.equal(complete?.type === 'complete' ? complete.stopReason : undefined, 'end_turn');
+    assert.equal(fixture.events.some((event) => event.type === 'error'), false);
+  });
+
+  test('an unrescuable turn under the shipped default ends with the explicit context_budget_exhausted outcome', async () => {
+    // Same runtime-derived default (window 120 → reserve 30, high water 90):
+    // no prior turns leaves no safe completed span, and the request genuinely
+    // exceeds the window — the turn must end with the first-class outcome, not
+    // a raw provider error.
+    const fixture = buildFixture({
+      useRuntimeDefaultPolicy: true,
+      contextWindow: 120,
+      withoutPriorTurns: true,
+    });
+    await runFixtureTurn(fixture);
+
+    const complete = fixture.events.find((event) => event.type === 'complete');
+    assert.equal(complete?.type, 'complete');
+    if (complete?.type !== 'complete') return;
+    assert.equal(complete.stopReason, 'context_budget_exhausted');
+    assert.equal(complete.contextBudgetExhaustedDetail, 'no_safe_completed_span');
+    assert.equal(fixture.events.some((event) => event.type === 'error'), false);
   });
 });
 

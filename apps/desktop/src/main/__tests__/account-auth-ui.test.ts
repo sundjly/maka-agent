@@ -192,9 +192,10 @@ describe('Account settings credential probe UI', () => {
 
   it('sanitizes account-page connection test failures before toast', async () => {
     const source = await readSettingsCombinedSource();
+    const { shared } = await readProviderSettingsSources();
     const page = source.match(/function AccountSettingsPage[\s\S]*?function AccountConnectionRow/)?.[0] ?? '';
-    const helper = source.match(/function accountConnectionTestFailureMessage\(result: ConnectionTestResult\): string \{[\s\S]*?\n\}/)?.[0] ?? '';
-    const fallback = source.match(/function accountConnectionTestFailureFallback\(result: ConnectionTestResult\): string \{[\s\S]*?\n\}/)?.[0] ?? '';
+    const helper = shared.match(/function connectionTestFailureMessage\([\s\S]*?\n\}/)?.[0] ?? '';
+    const fallback = shared.match(/function connectionTestFailureFallback\([\s\S]*?\n\}/)?.[0] ?? '';
 
     assert.match(
       helper,
@@ -202,18 +203,28 @@ describe('Account settings credential probe UI', () => {
       'Account page connection-test failures must classify/redact raw provider messages before toast',
     );
     assert.match(fallback, /statusCode === 429[\s\S]*触发速率限制/);
-    assert.match(fallback, /errorClass === 'auth'[\s\S]*鉴权失败/);
+    assert.match(fallback, /errorClass === 'auth'[\s\S]*copy\.auth/);
     assert.match(fallback, /errorClass === 'network'[\s\S]*网络错误，请检查服务地址或代理设置后重试/);
     assert.doesNotMatch(fallback, /Base URL/);
     assert.match(
+      source,
+      /const ACCOUNT_CONNECTION_TEST_COPY = \{[\s\S]*auth: '鉴权失败，请检查模型密钥、订阅账号登录或凭据配置后重试。',[\s\S]*recheck: '连接测试失败，请检查模型连接配置后重试。',[\s\S]*\} as const;/,
+      'Account page must inject its broader troubleshooting copy into the shared helper',
+    );
+    assert.match(
       page,
-      /toast\.error\('连接测试失败', accountConnectionTestFailureMessage\(result\)\)/,
+      /toast\.error\('连接测试失败', connectionTestFailureMessage\(result, ACCOUNT_CONNECTION_TEST_COPY\)\)/,
       'Account page test failure toast must not use result.errorMessage directly',
     );
     assert.match(
       page,
       /toast\.error\('测试出错', settingsActionErrorMessage\(error\)\)/,
       'Account page thrown test failures must use the shared Settings sanitized error helper',
+    );
+    assert.doesNotMatch(
+      page,
+      /function accountConnectionTestFailure(?:Message|Fallback)\(/,
+      'Account page must not keep a private connection-test failure classifier after sharing',
     );
     assert.doesNotMatch(
       page,
@@ -228,22 +239,17 @@ describe('Account settings credential probe UI', () => {
 
     assert.match(
       page,
-      /const testingSlugRef = useRef<string \| null>\(null\)/,
-      'Account page connection tests need a synchronous duplicate-click guard, not only React state',
+      /const connectionTestGuard = useActionGuard<string>\(\)/,
+      'Account page connection tests need a synchronous duplicate-click guard from the shared hook, not only React state',
     );
     assert.match(
       page,
-      /const accountPageMountedRef = useMountedRef\(\);[\s\S]*useEffect\(\(\) => \{[\s\S]*return \(\) => \{[\s\S]*testingSlugRef\.current = null;/,
-      'Account page must release test ownership when Settings closes',
-    );
-    assert.match(
-      page,
-      /async function testConnection\(slug: string\) \{[\s\S]*if \(testingSlugRef\.current !== null\) return;[\s\S]*testingSlugRef\.current = slug;[\s\S]*await window\.maka\.connections\.test\(slug\)[\s\S]*if \(!accountPageMountedRef\.current \|\| testingSlugRef\.current !== slug\) return;/,
+      /async function testConnection\(slug: string\) \{[\s\S]*if \(!connectionTestGuard\.begin\(slug\)\) return;[\s\S]*await window\.maka\.connections\.test\(slug\)[\s\S]*if \(!accountPageMountedRef\.current \|\| connectionTestGuard\.current !== slug\) return;/,
       'Account page connection test must set the duplicate-click guard before awaiting IPC',
     );
     assert.match(
       page,
-      /finally \{[\s\S]*if \(accountPageMountedRef\.current && testingSlugRef\.current === slug\) \{[\s\S]*try \{[\s\S]*await props\.onRefresh\(\);[\s\S]*\} catch \(error\) \{[\s\S]*if \(accountPageMountedRef\.current && testingSlugRef\.current === slug\) \{[\s\S]*toast\.error\('刷新模型连接状态失败', settingsActionErrorMessage\(error\)\);[\s\S]*\} finally \{[\s\S]*testingSlugRef\.current = null;[\s\S]*if \(accountPageMountedRef\.current\) \{[\s\S]*setTestingSlug\(null\);/,
+      /finally \{[\s\S]*if \(accountPageMountedRef\.current && connectionTestGuard\.current === slug\) \{[\s\S]*try \{[\s\S]*await props\.onRefresh\(\);[\s\S]*\} catch \(error\) \{[\s\S]*if \(accountPageMountedRef\.current && connectionTestGuard\.current === slug\) \{[\s\S]*toast\.error\('刷新模型连接状态失败', settingsActionErrorMessage\(error\)\);[\s\S]*\} finally \{[\s\S]*connectionTestGuard\.finish\(\);[\s\S]*if \(accountPageMountedRef\.current\) \{[\s\S]*setTestingSlug\(null\);/,
       'Account page connection test must keep the button pending through status refresh and surface refresh failures',
     );
     assert.doesNotMatch(
@@ -264,28 +270,28 @@ describe('Account settings credential probe UI', () => {
     );
     assert.match(
       page,
-      /return \(\) => \{[\s\S]*testingSlugRef\.current = null;/,
-      'Account page cleanup must release an in-flight connection test owner',
+      /const connectionTestGuard = useActionGuard<string>\(\)/,
+      'Account page must hold its in-flight connection test owner in the shared guard (released on unmount)',
     );
     assert.match(
       page,
-      /const result = await window\.maka\.connections\.test\(slug\);[\s\S]*if \(!accountPageMountedRef\.current \|\| testingSlugRef\.current !== slug\) return;[\s\S]*if \(result\.ok\) \{/,
+      /const result = await window\.maka\.connections\.test\(slug\);[\s\S]*if \(!accountPageMountedRef\.current \|\| connectionTestGuard\.current !== slug\) return;[\s\S]*if \(result\.ok\) \{/,
       'Connection test success/failure toasts must not fire after unmount',
     );
     assert.match(
       page,
-      /catch \(error\) \{[\s\S]*if \(accountPageMountedRef\.current && testingSlugRef\.current === slug\) \{[\s\S]*toast\.error\('测试出错', settingsActionErrorMessage\(error\)\);/,
+      /catch \(error\) \{[\s\S]*if \(accountPageMountedRef\.current && connectionTestGuard\.current === slug\) \{[\s\S]*toast\.error\('测试出错', settingsActionErrorMessage\(error\)\);/,
       'Thrown connection-test errors must not toast after unmount',
     );
     assert.match(
       page,
-      /finally \{[\s\S]*if \(accountPageMountedRef\.current && testingSlugRef\.current === slug\) \{[\s\S]*await props\.onRefresh\(\);/,
+      /finally \{[\s\S]*if \(accountPageMountedRef\.current && connectionTestGuard\.current === slug\) \{[\s\S]*await props\.onRefresh\(\);/,
       'Post-test status refresh must not run after the account page unmounts',
     );
     assert.match(
       page,
-      /testingSlugRef\.current = null;[\s\S]*if \(accountPageMountedRef\.current\) \{[\s\S]*setTestingSlug\(null\);/,
-      'Connection-test cleanup must release the ref but not write React pending state after unmount',
+      /connectionTestGuard\.finish\(\);[\s\S]*if \(accountPageMountedRef\.current\) \{[\s\S]*setTestingSlug\(null\);/,
+      'Connection-test cleanup must release the guard but not write React pending state after unmount',
     );
   });
 

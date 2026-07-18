@@ -25,7 +25,8 @@ import {
 import type { GoalTurnOutcome, SessionActivityLease } from '@maka/runtime';
 import type { ModelChoice } from './connection-target.js';
 import { listApiKeyOnboardableProviders, type MakaOnboardingSurface } from './onboarding.js';
-import type { MakaCliSkillSurface } from './runtime-bootstrap.js';
+import type { MakaCliSkillSurface, SessionRecapGenerator } from './runtime-bootstrap.js';
+import { AUTO_RECAP_DISPLAY_LIMIT_BYTES, shouldAutoRecap } from './session-recap.js';
 import {
   composeSkillInvocationMessage,
   listInvocableSkills,
@@ -140,6 +141,12 @@ export interface MakaPiTuiInput {
   /** First-run mode: auto-open the onboarding wizard on launch instead of
    *  waiting for /setup (used when the CLI starts with no configured connection). */
   firstRun?: boolean;
+  /**
+   * One-sentence session recap generator (issue #1055). Powers `/recap` and
+   * the idle-return auto-recap. Omitting it disables both — `/recap` reports
+   * unavailability and no auto-recap is ever scheduled.
+   */
+  recap?: SessionRecapGenerator;
 }
 
 export async function runMakaPiTui(input: MakaPiTuiInput): Promise<void> {
@@ -163,6 +170,19 @@ export async function runMakaPiTui(input: MakaPiTuiInput): Promise<void> {
   let closed = false;
   let currentActivityCompletion: Promise<void> | undefined;
   let permissionResponseInFlightRequestId: string | null = null;
+  // Session recap (issue #1055): an in-flight lock shared by manual and
+  // automatic recap calls, an activity clock for idle-return detection, a
+  // watermark so auto-recap fires at most once per newly reached main turn,
+  // and a sequence counter bumped once per submitted prompt so an idle recap
+  // can detect it was superseded by a later prompt while it was generating.
+  let recapInFlight = false;
+  let lastActivityAt = Date.now();
+  // Session-scoped watermark: null (or a stale sessionId) is equivalent to a
+  // fresh session that has never had a recap (count 0). Prevents a recap
+  // triggered in session A from suppressing the first eligible recap in a
+  // later session B that happens to reach the same main-turn count.
+  let recapWatermark: { sessionId: string; mainTurnCount: number } | null = null;
+  let promptSeq = 0;
   const beginActivity = () => {
     let finish!: () => void;
     const completion = new Promise<void>((resolve) => { finish = resolve; });
@@ -620,8 +640,20 @@ export async function runMakaPiTui(input: MakaPiTuiInput): Promise<void> {
       requestRender();
       return;
     }
+    // Captured BEFORE lastActivityAt is refreshed, so the idle gap measures up
+    // to (not including) this very submission.
+    const idleMs = Date.now() - lastActivityAt;
     editor.addToHistory(prompt);
     if (handleSlashCommand(prompt)) return;
+    // Refreshed only for a prompt that actually opens a turn: a slash command
+    // (e.g. /help) typed on the way back from idle must not consume the idle
+    // gap the next real prompt is measuring.
+    lastActivityAt = Date.now();
+    // This prompt is about to open a turn, so it counts toward the sequence
+    // an in-flight idle recap is watching — including when this very prompt
+    // is the idle-return submission that triggers the recap below.
+    promptSeq += 1;
+    maybeTriggerAutoRecap(idleMs);
     if (!input.skills || parseSkillInvocationTokens(prompt).length === 0) {
       void runAgentTurn({
         kind: 'external',
@@ -891,6 +923,9 @@ export async function runMakaPiTui(input: MakaPiTuiInput): Promise<void> {
       editor.disableSubmit = false;
       terminal.setProgress(false);
       attention.promptTurnEnded();
+      // A turn ending is activity too — resets the idle clock the next
+      // submission's auto-recap check measures against.
+      lastActivityAt = Date.now();
     };
 
     return runMakaPiTuiTurn({
@@ -1263,6 +1298,123 @@ export async function runMakaPiTui(input: MakaPiTuiInput): Promise<void> {
       },
       { minPrimaryColumnWidth: 16, maxPrimaryColumnWidth: 32, onCancel: input.firstRun ? () => beginClose() : undefined },
     );
+  };
+
+  // One-sentence session recap (issue #1055). Shared by the manual /recap
+  // command and idle-return auto-recap; both paths route through the same
+  // in-flight lock so at most one recap call runs at a time.
+  const runRecap = async (reason: 'manual' | 'idle'): Promise<void> => {
+    // Captured synchronously on entry, so for the idle path this already
+    // includes the seq bump from the very prompt that triggered this call
+    // (submitPrompt bumps promptSeq before invoking maybeTriggerAutoRecap).
+    // Only a prompt submitted *after* this point — i.e. later than the one
+    // that triggered the recap — should make the result stale.
+    const seqAtStart = promptSeq;
+    // Captured synchronously on entry, before any await: /session, /new, and
+    // rewind never bump promptSeq, so a session switch mid-generate must be
+    // caught by comparing sessionIds directly rather than relying on seq.
+    const sessionIdAtStart = input.driver.getSessionId();
+    if (!input.recap) {
+      if (reason === 'manual') {
+        state.entries.push({
+          kind: 'notice',
+          level: 'error',
+          text: 'Recap is not available in this environment.',
+        });
+        requestRender();
+      }
+      return;
+    }
+    if (recapInFlight) {
+      if (reason === 'manual') {
+        state.entries.push({
+          kind: 'notice',
+          level: 'error',
+          text: 'Recap already running.',
+        });
+        requestRender();
+      }
+      return;
+    }
+    // Locked synchronously, before any await: two /recap invocations
+    // submitted back-to-back must not both pass the recapInFlight check above
+    // before either sets it. The rest of the body is one try/finally so every
+    // early return (including "Nothing to recap yet" and a null session)
+    // releases the lock.
+    recapInFlight = true;
+    try {
+      const mainTurnCount = (await input.driver.listRewindTargets()).length;
+      if (reason === 'manual' && mainTurnCount < 1) {
+        state.entries.push({
+          kind: 'notice',
+          level: 'info',
+          text: 'Nothing to recap yet.',
+        });
+        requestRender();
+        return;
+      }
+      if (!sessionIdAtStart) return;
+
+      const result = await input.recap.generate(sessionIdAtStart, reason);
+
+      // The active session must still be the one this recap started for —
+      // checked before ANY display (success notice or manual failure notice).
+      // /session, /new, or a rewind switched the active session while
+      // generate() was in flight: the session this result belongs to is gone
+      // from view, so surfacing it (success or error) would land on the wrong
+      // session. Drop it silently regardless of manual/idle.
+      if (input.driver.getSessionId() !== sessionIdAtStart) return;
+
+      if (!result.ok) {
+        if (reason === 'manual') {
+          state.entries.push({
+            kind: 'notice',
+            level: 'error',
+            text: `Recap failed: ${result.error}`,
+          });
+          requestRender();
+        }
+        return;
+      }
+
+      if (reason === 'idle') {
+        // Below the display threshold suppresses the notice (still persisted by
+        // the generator); a prompt submitted after seqAtStart while the call
+        // was in flight means a later prompt has superseded this recap — drop
+        // it silently either way.
+        if (Buffer.byteLength(result.raw, 'utf8') > AUTO_RECAP_DISPLAY_LIMIT_BYTES) return;
+        if (promptSeq !== seqAtStart) return;
+      }
+
+      state.entries.push({
+        kind: 'notice',
+        level: 'info',
+        text: `Recap: ${result.text}`,
+      });
+      requestRender();
+    } finally {
+      recapInFlight = false;
+    }
+  };
+
+  // Fire-and-forget idle-return check: a normal prompt submitted after a long
+  // enough gap auto-triggers a recap, without blocking the turn it opens.
+  const maybeTriggerAutoRecap = (idleMs: number): void => {
+    if (!input.recap) return;
+    void (async () => {
+      try {
+        const sessionId = input.driver.getSessionId();
+        const mainTurnCount = (await input.driver.listRewindTargets()).length;
+        const lastRecapMainTurnCount = sessionId && recapWatermark?.sessionId === sessionId
+          ? recapWatermark.mainTurnCount
+          : 0;
+        if (!shouldAutoRecap({ idleMs, mainTurnCount, lastRecapMainTurnCount })) return;
+        if (sessionId) recapWatermark = { sessionId, mainTurnCount };
+        void runRecap('idle');
+      } catch {
+        // Best-effort: auto-recap must never surface an error to the user.
+      }
+    })();
   };
 
   const compactSession = async () => {
@@ -1657,6 +1809,13 @@ export async function runMakaPiTui(input: MakaPiTuiInput): Promise<void> {
       },
     },
     {
+      name: 'recap',
+      description: 'One-sentence recap of the session so far',
+      run: () => {
+        void runRecap('manual');
+      },
+    },
+    {
       name: 'rename',
       description: 'Rename current session',
       run: (parts: string[]) => {
@@ -1927,7 +2086,7 @@ const BOTTOM_PICKER_MARGIN_ROWS = 4;
 // The editor's autocomplete window height. Sized to fit the whole slash-command
 // menu (10 today) with headroom, so a bare `/` shows every command rather than
 // scrolling a subset.
-const EDITOR_AUTOCOMPLETE_MAX_VISIBLE = 12;
+const EDITOR_AUTOCOMPLETE_MAX_VISIBLE = 13;
 
 // A short, stable slice of a session id — enough to tell two same-named
 // sessions apart in the picker without showing the full unreadable uuid.

@@ -11,6 +11,7 @@ import type { BranchFromTurnInput, CreateSessionInput, UserMessageInput } from '
 import type { SessionSummary, StoredMessage } from '@maka/core/session';
 import { userFacingText } from '@maka/core/session';
 import type { ThinkingLevel } from '@maka/core/model-thinking';
+import { DEFAULT_SESSION_NAME } from '@maka/core';
 
 const execFileAsync = promisify(execFile);
 
@@ -121,7 +122,7 @@ export interface MakaSessionDriver {
   setModel(model: string, connectionSlug?: string): Promise<void>;
   setThinkingLevel(level: ThinkingLevel | undefined): Promise<void>;
   setPermissionMode(mode: PermissionMode): Promise<void>;
-  renameSession(name: string): Promise<void>;
+  renameSession(name: string): Promise<string | void>;
   moveSession?(cwd: string): Promise<MakaSessionMoveResult>;
   switchSession(sessionId: string): Promise<MakaSessionSwitchResult>;
   /** Every prompted turn the user can rewind to, newest first. */
@@ -189,7 +190,7 @@ class RuntimeMakaSessionDriver implements MakaSessionDriver {
     prompt: string,
     options: MakaPreparePromptOptions = {},
   ): Promise<MakaPreparedSessionTurn> {
-    const sessionId = await this.ensureSession(prompt);
+    const sessionId = await this.ensureSession();
     const turnId = options.turnId ?? this.newId();
     const pendingReminder = this.pendingCwdReminder;
     const baseModelText = options.modelText ?? prompt;
@@ -332,9 +333,9 @@ class RuntimeMakaSessionDriver implements MakaSessionDriver {
     this.permissionMode = mode;
   }
 
-  async renameSession(name: string): Promise<void> {
+  async renameSession(name: string): Promise<string> {
     if (!this.sessionId) throw new Error('Cannot rename before a session starts.');
-    await this.input.runtime.updateSession(this.sessionId, { name });
+    return (await this.input.runtime.updateSession(this.sessionId, { name })).name;
   }
 
   async moveSession(rawCwd: string): Promise<MakaSessionMoveResult> {
@@ -432,11 +433,11 @@ class RuntimeMakaSessionDriver implements MakaSessionDriver {
     return this.sessionId;
   }
 
-  private async ensureSession(prompt: string): Promise<string> {
+  private async ensureSession(): Promise<string> {
     if (this.sessionId) return this.sessionId;
     const session = await this.input.runtime.createSession({
       cwd: this.cwd,
-      name: prompt.slice(0, 42) || '新建对话',
+      name: DEFAULT_SESSION_NAME,
       backend: 'ai-sdk',
       llmConnectionSlug: this.llmConnectionSlug,
       model: this.model,

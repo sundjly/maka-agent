@@ -125,6 +125,7 @@ export interface MakaPiTuiInput {
    * without waiting real seconds; defaults to the attention layer's own value.
    */
   attentionLongTurnThresholdMs?: number;
+  subscribeSessionTitleChanges?: (listener: (sessionId: string) => void) => () => void;
   subscribeShellRunUpdates?: (listener: (update: ShellRunUpdate) => void) => () => void;
   listShellRunUpdates?: (sessionId: string) => Promise<ShellRunUpdate[]>;
   /**
@@ -258,11 +259,25 @@ export async function runMakaPiTui(input: MakaPiTuiInput): Promise<void> {
       ? { longTurnThresholdMs: input.attentionLongTurnThresholdMs }
       : {}),
   });
+  let sessionTitleVersion = 0;
+  const setSessionTitle = (title: string) => {
+    sessionTitleVersion += 1;
+    attention.setBaseTitle(`${title} (${input.title})`);
+  };
 
   const requestRender = () => {
     transcript.invalidate();
     tui.requestRender();
   };
+  const unsubscribeSessionTitleChanges = input.subscribeSessionTitleChanges?.((sessionId) => {
+    const refreshVersion = ++sessionTitleVersion;
+    void input.driver.listSessions().then((sessions) => {
+      if (closed || input.driver.getSessionId() !== sessionId || sessionTitleVersion !== refreshVersion) return;
+      const session = sessions.find((candidate) => candidate.id === sessionId);
+      if (!session) return;
+      setSessionTitle(session.name);
+    }).catch(() => {});
+  }) ?? (() => {});
   const shellRunElapsedTicker = createShellRunElapsedTicker({
     state,
     onTick: requestRender,
@@ -518,6 +533,7 @@ export async function runMakaPiTui(input: MakaPiTuiInput): Promise<void> {
     removeProcessHandlers();
     unbindGoalHost?.();
     unbindGoalHost = undefined;
+    unsubscribeSessionTitleChanges();
     unsubscribeShellRunUpdates?.();
     resetShellRunSessionState();
     shellRunElapsedTicker.dispose();
@@ -1079,6 +1095,7 @@ export async function runMakaPiTui(input: MakaPiTuiInput): Promise<void> {
   // runner state (model/connection/thinking/transcript/scroll).
   const applySwitchResult = async ({ summary, messages }: MakaSessionSwitchResult): Promise<void> => {
     cwd = summary.cwd ?? cwd;
+    setSessionTitle(summary.name);
     const previousModel = model;
     model = summary.model;
     const previousConnectionSlug = connectionSlug;
@@ -1570,6 +1587,7 @@ export async function runMakaPiTui(input: MakaPiTuiInput): Promise<void> {
 
   const newSession = () => {
     input.driver.startNewSession();
+    attention.setBaseTitle(input.title);
     resetShellRunSessionState();
     // Fresh transcript for the fresh session; the next prompt creates it on disk.
     // Leave the transcript empty (no confirmation notice) so /new opens on the
@@ -1964,11 +1982,12 @@ export async function runMakaPiTui(input: MakaPiTuiInput): Promise<void> {
           return;
         }
         void runControl(async () => {
-          await input.driver.renameSession(name);
+          const renamedName = await input.driver.renameSession(name) ?? name;
+          setSessionTitle(renamedName);
           state.entries.push({
             kind: 'notice',
             level: 'info',
-            text: `Session renamed to "${name}"`,
+            text: `Session renamed to "${renamedName}"`,
           });
           requestRender();
         });
